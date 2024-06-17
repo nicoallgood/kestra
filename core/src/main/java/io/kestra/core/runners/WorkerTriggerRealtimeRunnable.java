@@ -1,6 +1,7 @@
 package io.kestra.core.runners;
 
 import io.kestra.core.models.executions.Execution;
+import io.kestra.core.models.flows.State;
 import io.kestra.core.models.triggers.RealtimeTriggerInterface;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
@@ -28,17 +29,18 @@ public class WorkerTriggerRealtimeRunnable extends AbstractWorkerTriggerRunnable
     }
 
     @Override
-    public void doRun() throws Exception {
+    public State.Type doCall() throws Exception {
         Publisher<Execution> evaluate = streamingTrigger.evaluate(
             workerTrigger.getConditionContext().withRunContext(runContext),
             workerTrigger.getTriggerContext()
         );
-        taskState = SUCCESS;
         Flux.from(evaluate)
             .onBackpressureBuffer()
             .doOnError(onError)
             .doOnNext(onNext)
             .onErrorComplete()
             .blockLast();
+
+        return SUCCESS;
     }
 }

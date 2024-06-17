@@ -1,18 +1,20 @@
 package io.kestra.core.runners;
 
 import io.kestra.core.models.WorkerJobLifecycle;
+import io.kestra.core.models.flows.State;
 import lombok.Getter;
 import lombok.Synchronized;
 import org.slf4j.Logger;
 
 import java.time.Duration;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static io.kestra.core.models.flows.State.Type.FAILED;
 import static io.kestra.core.models.flows.State.Type.KILLED;
 
-public abstract class AbstractWorkerRunnable implements Runnable {
+public abstract class AbstractWorkerRunnable implements Callable<State.Type> {
     volatile boolean killed = false;
 
     Logger logger;
@@ -23,8 +25,7 @@ public abstract class AbstractWorkerRunnable implements Runnable {
     @Getter
     String type;
 
-    @Getter
-    io.kestra.core.models.flows.State.Type taskState;
+    State.Type taskState;
 
     @Getter
     Throwable exception;
@@ -33,22 +34,13 @@ public abstract class AbstractWorkerRunnable implements Runnable {
 
     private final ClassLoader classLoader;
 
-    private Thread thread;
+    private Thread currentThread;
 
     public AbstractWorkerRunnable(RunContext runContext, String type, ClassLoader classLoader) {
         this.logger = runContext.logger();
         this.runContext = runContext;
         this.type = type;
         this.classLoader = classLoader;
-    }
-
-    public void setThread(Thread thread) {
-        if (this.thread != null) {
-            throw new IllegalStateException("Thread already set");
-        }
-
-        this.thread = thread;
-        thread.setUncaughtExceptionHandler(this::exceptionHandler);
     }
 
     @Synchronized
@@ -58,22 +50,21 @@ public abstract class AbstractWorkerRunnable implements Runnable {
 
     /** {@inheritDoc} **/
     @Override
-    public void run() {
-        if (this.thread == null) {
-            throw new IllegalStateException("Cannot run if thread is not set");
-        }
+    public State.Type call() {
+        this.currentThread = Thread.currentThread();
+        this.currentThread.setContextClassLoader(classLoader);
 
-        Thread.currentThread().setContextClassLoader(classLoader);
         try {
-            doRun();
+            this.taskState = doCall();
         } catch (Exception e) {
-            this.exceptionHandler(this, e);
+            this.exceptionHandler(e);
         } finally {
             shutdownLatch.countDown();
         }
+        return this.taskState;
     }
 
-    protected abstract void doRun() throws Exception;
+    protected abstract State.Type doCall() throws Exception;
 
     /**
      * Signals to the job executed by this worker thread to stop.
@@ -102,7 +93,7 @@ public abstract class AbstractWorkerRunnable implements Runnable {
         interrupt();
     }
 
-    protected void exceptionHandler(Runnable t, Throwable e) {
+    protected void exceptionHandler(Throwable e) {
         this.exception = e;
 
         if (!this.killed) {
@@ -112,6 +103,8 @@ public abstract class AbstractWorkerRunnable implements Runnable {
     }
 
     public void interrupt() {
-        thread.interrupt();
+        if (this.currentThread != null) {
+            this.currentThread.interrupt();
+        }
     }
 }
