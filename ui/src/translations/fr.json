@@ -804,6 +804,7 @@
       "true": "{count} triggers désactivés",
       "false": "{count} triggers activés"
     },
-    "workerId": "Worker Id"
+    "workerId": "Worker Id",
+    "kvStore": "Stockage de clés/valeurs"
   }
 }

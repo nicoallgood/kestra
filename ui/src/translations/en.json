@@ -831,6 +831,7 @@
       "true": "{count} trigger(s) disabled",
       "false": "{count} trigger(s) enabled"
     },
-    "workerId": "Worker Id"
+    "workerId": "Worker Id",
+    "kvStore": "KV Store"
   }
 }
